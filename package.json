@@ -1,0 +1,18 @@
+{
+  "name": "debt-validation-prompter",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "format": "prettier . --write",
+    "check": "prettier . --check"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.0"
+  },
+  "main": "app.js",
+  "keywords": [],
+  "author": "Colby Cardell",
+  "license": "ISC",
+  "description": ""
+}

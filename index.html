@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Debt Validation Prompter</title>
+    <meta
+      name="description"
+      content="Generate FDCPA validation / dispute / cease-contact letters (local templates)."
+    />
+
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+
+  <body>
+    <div class="wrap">
+      <div class="topbar">
+        <div class="brand">
+          <h1>Debt Validation Prompter</h1>
+          <p class="sub">
+            Generate FDCPA validation / dispute / cease-contact letters (local
+            templates). Optional AI polish is <b>not wired</b> by default—prompt
+            pack is provided instead.
+          </p>
+        </div>
+
+        <div class="actions">
+          <button class="btn" id="btnKeys" type="button">
+            API Keys (optional)
+          </button>
+          <button class="btn" id="btnDemo" type="button">Fill Demo Data</button>
+          <button class="btn" id="btnLocal" type="button">
+            Generate (Local)
+          </button>
+          <button class="btn primary" id="btnPromptPack" type="button">
+            Build Prompt Pack
+          </button>
+          <button class="btn" id="btnCopyText" type="button">Copy Text</button>
+          <button class="btn" id="btnCopyHtml" type="button">Copy HTML</button>
+          <button class="btn" id="btnPrint" type="button">Print</button>
+          <button class="btn danger" id="btnReset" type="button">Reset</button>
+        </div>
+      </div>
+
+      <div class="grid">
+        <!-- LEFT -->
+        <div class="card left">
+          <h2>Inputs</h2>
+          <div class="tiny">
+            Not legal advice. This formats consumer requests and preserves a
+            paper trail. Keep copies and consider certified mail when
+            appropriate.
+          </div>
+
+          <div class="section">
+            <div class="head">
+              <div class="title">Letter type</div>
+            </div>
+
+            <div class="row">
+              <div>
+                <label>Mode</label>
+                <select id="letterMode">
+                  <option value="validate_cease_calls">
+                    Debt validation + cease calls/text (recommended)
+                  </option>
+                  <option value="validate_only">Debt validation only</option>
+                  <option value="cease_all">
+                    Cease communication (all channels)
+                  </option>
+                  <option value="credit_reporting">
+                    Dispute + credit reporting correction request
+                  </option>
+                  <option value="itemization">
+                    Request itemization / chain of title focus
+                  </option>
+                </select>
+              </div>
+
+              <div>
+                <label>Jurisdiction (optional)</label>
+                <input
+                  id="jurisdiction"
+                  placeholder="e.g., Tennessee / Federal"
+                />
+              </div>
+            </div>
+
+            <div class="pillrow" style="margin-top: 10px">
+              <label style="width: 100%; margin: 0 0 4px 2px"
+                >Include references to (checkboxes)</label
+              >
+              <span class="pill"
+                ><input type="checkbox" id="opt1692g" checked /> FDCPA 15 U.S.C.
+                §1692g (validation)</span
+              >
+              <span class="pill"
+                ><input type="checkbox" id="opt1692c" checked /> FDCPA 15 U.S.C.
+                §1692c(c) (cease comm)</span
+              >
+              <span class="pill"
+                ><input type="checkbox" id="opt1692d" /> FDCPA §1692d
+                (harassment)</span
+              >
+              <span class="pill"
+                ><input type="checkbox" id="opt1692e" /> FDCPA §1692e
+                (misrepresentation)</span
+              >
+              <span class="pill"
+                ><input type="checkbox" id="optFCRA" /> FCRA 15 U.S.C. §1681
+                (credit reporting)</span
+              >
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="head">
+              <div class="title">Your info (consumer)</div>
+            </div>
+
+            <div class="row">
+              <div>
+                <label>Full name</label>
+                <input id="yourName" placeholder="Your full legal name" />
+              </div>
+              <div>
+                <label>Email (optional)</label>
+                <input id="yourEmail" placeholder="you@email.com" />
+              </div>
+            </div>
+
+            <div class="row">
+              <div>
+                <label>Phone (optional)</label>
+                <input id="yourPhone" placeholder="(###) ###-####" />
+              </div>
+              <div>
+                <label>Today’s date</label>
+                <input id="today" />
+              </div>
+            </div>
+
+            <div>
+              <label>Mailing address (where they must respond)</label>
+              <textarea
+                id="yourAddress"
+                placeholder="Street&#10;City, State ZIP"
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="head">
+              <div class="title">Collector / Furnisher info</div>
+            </div>
+
+            <div class="row">
+              <div>
+                <label>Company name</label>
+                <input
+                  id="collectorName"
+                  placeholder="e.g., Example Collections LLC"
+                />
+              </div>
+              <div>
+                <label>Email (optional)</label>
+                <input
+                  id="collectorEmail"
+                  placeholder="e.g., support@company.com"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label>Company mailing address</label>
+              <textarea
+                id="collectorAddress"
+                placeholder="Street / PO Box&#10;City, State ZIP"
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="head">
+              <div class="title">Alleged account details</div>
+            </div>
+
+            <div class="row">
+              <div>
+                <label>Reported balance</label>
+                <input id="balance" placeholder="e.g., $3,250" />
+              </div>
+              <div>
+                <label>Date shown opened / reported (optional)</label>
+                <input id="opened" placeholder="e.g., 10/02/2024" />
+              </div>
+            </div>
+
+            <div class="row">
+              <div>
+                <label>Account / reference # (if any)</label>
+                <input
+                  id="accountRef"
+                  placeholder="From letter or credit report (optional)"
+                />
+              </div>
+              <div>
+                <label>Original creditor (as shown)</label>
+                <input
+                  id="origCreditor"
+                  placeholder="As listed on report (optional)"
+                />
+              </div>
+            </div>
+
+            <div class="row">
+              <div>
+                <label>Where you saw it</label>
+                <input
+                  id="sourceSeen"
+                  placeholder="e.g., Credit report / bureau / app"
+                />
+              </div>
+              <div>
+                <label>Category</label>
+                <select id="debtType">
+                  <option value="auto">Auto / vehicle</option>
+                  <option value="creditcard">Credit card</option>
+                  <option value="personal">Personal loan</option>
+                  <option value="medical">Medical</option>
+                  <option value="other">Other / unknown</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label>Situation summary (facts only; tight)</label>
+              <textarea
+                id="summary"
+                placeholder="Example: Disputed; unsure this debt is mine; request validation, itemization, and written-only contact."
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="head">
+              <div class="title">Communication controls</div>
+            </div>
+
+            <div class="pillrow">
+              <span class="pill"
+                ><input type="checkbox" id="prefMailOnly" checked /> Communicate
+                in writing only</span
+              >
+              <span class="pill"
+                ><input type="checkbox" id="prefNoCalls" checked /> No phone
+                calls</span
+              >
+              <span class="pill"
+                ><input type="checkbox" id="prefNoTexts" checked /> No
+                texts</span
+              >
+              <span class="pill"
+                ><input type="checkbox" id="prefNoWorkEmail" checked /> Do not
+                contact employer email</span
+              >
+            </div>
+
+            <div class="help">
+              <b>Tip:</b> If you’re logging harassment, keep dates/times +
+              screenshots. Don’t argue by phone—force paper.
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="head">
+              <div class="title">Auto-specific (optional)</div>
+            </div>
+
+            <div class="row">
+              <div>
+                <label>VIN (optional)</label>
+                <input id="vin" placeholder="Vehicle VIN if known" />
+              </div>
+              <div>
+                <label>Year/Make/Model (optional)</label>
+                <input id="ymm" placeholder="e.g., 2014 BMW 328i" />
+              </div>
+            </div>
+
+            <div>
+              <label>What you want them to prove (optional)</label>
+              <textarea
+                id="prove"
+                placeholder="Example: signed contract; chain of title; insurance proceeds applied; deficiency calculation; itemized balance..."
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="head">
+              <div class="title">AI settings (optional, not wired)</div>
+            </div>
+
+            <div class="row">
+              <div>
+                <label>Base URL (OpenAI-compatible)</label>
+                <input
+                  id="baseUrl"
+                  placeholder="Leave blank unless you wire AI calls"
+                />
+              </div>
+              <div>
+                <label>Model</label>
+                <input
+                  id="model"
+                  placeholder="Leave blank unless you wire AI calls"
+                />
+              </div>
+            </div>
+
+            <div class="row">
+              <div>
+                <label>Temperature</label>
+                <input
+                  id="temp"
+                  type="number"
+                  min="0"
+                  max="1.5"
+                  step="0.1"
+                  placeholder="0.2"
+                />
+              </div>
+              <div>
+                <label>Max tokens</label>
+                <input
+                  id="maxTokens"
+                  type="number"
+                  min="256"
+                  max="4096"
+                  step="64"
+                  placeholder="1200"
+                />
+              </div>
+            </div>
+
+            <div class="tiny">
+              This build produces a prompt pack JSON you can run anywhere. No
+              network calls are performed unless you implement them.
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT -->
+        <div class="card">
+          <h2>Output</h2>
+
+          <div class="tabs">
+            <button class="tab active" data-tab="letter" type="button">
+              Letter
+            </button>
+            <button class="tab" data-tab="text" type="button">
+              Plain text
+            </button>
+            <button class="tab" data-tab="prompt" type="button">
+              Prompt pack (JSON)
+            </button>
+          </div>
+
+          <div class="out" id="out">
+            <div class="letter" id="outLetter"></div>
+            <pre id="outText" style="display: none"></pre>
+            <pre id="outPrompt" style="display: none"></pre>
+          </div>
+
+          <div class="statusline">
+            <span class="badge" id="keyStatus">API key: not set</span>
+            <span class="badge" id="genStatus">Ready</span>
+          </div>
+
+          <div class="help" style="margin-top: 10px">
+            <b>Product note:</b> Keep the letter factual and concise. If they
+            can’t validate, that can support disputes with bureaus and
+            complaints with regulators.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal -->
+    <div
+      class="modalBackdrop"
+      id="modalBackdrop"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal">
+        <div class="modalHead">
+          <h3>API Keys (optional)</h3>
+          <button class="x" id="btnCloseModal" aria-label="Close" type="button">
+            ✕
+          </button>
+        </div>
+
+        <div>
+          <label>LLM API Key (stored in browser only)</label>
+          <input id="apiKey" placeholder="Paste key… (optional)" />
+        </div>
+
+        <div class="row" style="margin-top: 10px">
+          <div>
+            <label>Save behavior</label>
+            <select id="saveMode">
+              <option value="localStorage">
+                Save to localStorage (default)
+              </option>
+              <option value="sessionStorage">
+                Save to sessionStorage (clears on close)
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label>Quick actions</label>
+            <div class="pillrow">
+              <button class="btn danger" id="btnClearKeys" type="button">
+                Clear
+              </button>
+              <button class="btn primary" id="btnSaveKeys" type="button">
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="help" style="margin-top: 12px">
+          <b>Security:</b> Keys are stored only in your browser storage. They
+          are not embedded into the source unless you hardcode them (don’t).
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
