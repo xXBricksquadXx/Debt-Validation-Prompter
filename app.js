@@ -1,42 +1,106 @@
 // ---------- tiny helpers ----------
 const $ = (id) => document.getElementById(id);
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+const safe = (v) => (v || "").toString().trim();
 
-function safe(v) {
-  return (v || "").toString().trim();
-}
-function escHtml(s) {
-  return (s || "").toString().replace(
-    /[&<>"']/g,
-    (c) =>
-      ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#039;",
-      })[c]
-  );
-}
-function nowMMDDYYYY() {
+const escHtml = (s) =>
+  (s || "").toString().replace(/[&<>"']/g, (c) => {
+    const map = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;",
+    };
+    return map[c] || c;
+  });
+
+const nowMMDDYYYY = () => {
   const d = new Date();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   const yyyy = d.getFullYear();
   return `${mm}/${dd}/${yyyy}`;
-}
-async function copyToClipboard(text) {
+};
+
+const copyToClipboard = async (text) => {
   await navigator.clipboard.writeText(text);
-}
+};
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---------- minimal HTML sanitizer (model output) ----------
+// Goal: prevent obvious script injection if an LLM returns unsafe HTML.
+// This is not a full sanitizer, but it strips the highest-risk items.
+const sanitizeHtml = (html) => {
+  let s = (html || "").toString();
+
+  // remove code fences if model returns ```html ... ```
+  s = s.replace(/^```[a-zA-Z]*\s*/m, "").replace(/```$/m, "");
+
+  // strip scripts/styles/iframes/objects
+  s = s.replace(/<\s*script[^>]*>[\s\S]*?<\s*\/\s*script\s*>/gi, "");
+  s = s.replace(/<\s*style[^>]*>[\s\S]*?<\s*\/\s*style\s*>/gi, "");
+  s = s.replace(/<\s*iframe[^>]*>[\s\S]*?<\s*\/\s*iframe\s*>/gi, "");
+  s = s.replace(/<\s*object[^>]*>[\s\S]*?<\s*\/\s*object\s*>/gi, "");
+  s = s.replace(/<\s*embed[^>]*>/gi, "");
+
+  // strip inline event handlers like onclick=
+  s = s.replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, "");
+
+  // strip javascript: URLs
+  s = s.replace(/href\s*=\s*(['"])\s*javascript:[\s\S]*?\1/gi, 'href="#"');
+  s = s.replace(/src\s*=\s*(['"])\s*javascript:[\s\S]*?\1/gi, "");
+
+  return s.trim();
+};
+
+// ---------- fail-safe storage wrapper ----------
+const MEM = new Map();
+
+const makeSafeStore = (storageLike) => ({
+  getItem(key) {
+    try {
+      const v = storageLike?.getItem?.(key);
+      return v === undefined ? null : v;
+    } catch {
+      return MEM.has(key) ? MEM.get(key) : null;
+    }
+  },
+  setItem(key, val) {
+    try {
+      storageLike?.setItem?.(key, String(val));
+    } catch {
+      MEM.set(key, String(val));
+    }
+  },
+  removeItem(key) {
+    try {
+      storageLike?.removeItem?.(key);
+    } catch {
+      MEM.delete(key);
+    }
+  },
+});
+
+const safeLocal = makeSafeStore(window.localStorage);
+const safeSession = makeSafeStore(window.sessionStorage);
+
+const STORE_MODE_KEY = "dvp.saveMode";
 
 // ---------- storage (keys in browser only) ----------
 const LS = {
+  get mode() {
+    return safeLocal.getItem(STORE_MODE_KEY) || "localStorage";
+  },
   get store() {
-    const mode = localStorage.getItem("dvp.saveMode") || "localStorage";
-    return mode === "sessionStorage" ? sessionStorage : localStorage;
+    return this.mode === "sessionStorage" ? safeSession : safeLocal;
+  },
+  get otherStore() {
+    return this.mode === "sessionStorage" ? safeLocal : safeSession;
   },
   setMode(mode) {
-    localStorage.setItem("dvp.saveMode", mode);
+    safeLocal.setItem(STORE_MODE_KEY, mode);
   },
 };
 
@@ -76,7 +140,7 @@ const FIELD_IDS = [
   "maxTokens",
 ];
 
-function persistInputs() {
+const persistInputs = () => {
   const st = LS.store;
   FIELD_IDS.forEach((f) => {
     const el = $(f);
@@ -84,8 +148,9 @@ function persistInputs() {
     if (el.type === "checkbox") st.setItem("dvp." + f, el.checked ? "1" : "0");
     else st.setItem("dvp." + f, el.value ?? "");
   });
-}
-function restoreInputs() {
+};
+
+const restoreInputs = () => {
   const st = LS.store;
   FIELD_IDS.forEach((f) => {
     const el = $(f);
@@ -96,46 +161,82 @@ function restoreInputs() {
     if (el.type === "checkbox") el.checked = v === "1";
     else if (v !== "") el.value = v;
   });
-}
+};
 
-function loadKeysAndSettings() {
-  const mode = localStorage.getItem("dvp.saveMode") || "localStorage";
-  $("saveMode").value = mode;
-  LS.setMode(mode);
+const looksLikeKey = (k) => {
+  const s = safe(k);
+  if (!s) return false;
+  if (/\s/.test(s)) return false;
+  return s.length >= 16; // loose; avoids false negatives
+};
 
+const maskKey = (k) => {
+  const s = safe(k);
+  if (!s) return "";
+  const tail = s.slice(-4);
+  return `••••${tail}`;
+};
+
+const updateKeyStatus = () => {
+  const k = safe($("apiKey")?.value);
+  $("keyStatus").textContent = k
+    ? `LLM key: set (${maskKey(k)})`
+    : "LLM key: not set";
+};
+
+const setGenStatus = (msg) => {
+  $("genStatus").textContent = msg;
+};
+
+// Load key from selected store; if missing, try the other store (fail-safe).
+const loadKeyIntoField = () => {
   const st = LS.store;
-  $("apiKey").value = st.getItem("dvp.apiKey") || "";
+  let k = st.getItem("dvp.apiKey") || "";
+  if (!k) {
+    const ok = LS.otherStore.getItem("dvp.apiKey") || "";
+    if (ok) {
+      k = ok;
+      setGenStatus("Key found in other storage; Save to migrate");
+    }
+  }
+  $("apiKey").value = k;
   updateKeyStatus();
+};
 
-  // safe defaults (not personal, not vendor-specific)
+const loadKeysAndSettings = () => {
+  const mode = LS.mode;
+  $("saveMode").value = mode;
+
+  // safe defaults
   $("temp").value = $("temp").value || "0.2";
   $("maxTokens").value = $("maxTokens").value || "1200";
-}
 
-function saveKeys() {
+  loadKeyIntoField();
+};
+
+const saveKeys = () => {
   const st = LS.store;
-  st.setItem("dvp.apiKey", safe($("apiKey").value));
-  updateKeyStatus();
-}
+  const k = safe($("apiKey").value);
 
-function clearKeys() {
+  if (k && !looksLikeKey(k)) {
+    setGenStatus("Key looks malformed (not saved)");
+    return;
+  }
+
+  st.setItem("dvp.apiKey", k);
+  updateKeyStatus();
+  setGenStatus("Keys saved (browser storage)");
+};
+
+const clearKeys = () => {
   const st = LS.store;
   st.removeItem("dvp.apiKey");
   $("apiKey").value = "";
   updateKeyStatus();
-}
-
-function updateKeyStatus() {
-  const k = safe($("apiKey").value);
-  $("keyStatus").textContent = k ? "API key: set" : "API key: not set";
-}
-
-function setGenStatus(msg) {
-  $("genStatus").textContent = msg;
-}
+};
 
 // ---------- core: statutes / subject / requests ----------
-function statutesLine() {
+const statutesLine = () => {
   const refs = [];
   if ($("opt1692g").checked) refs.push("FDCPA 15 U.S.C. § 1692g");
   if ($("opt1692c").checked) refs.push("FDCPA 15 U.S.C. § 1692c(c)");
@@ -143,9 +244,9 @@ function statutesLine() {
   if ($("opt1692e").checked) refs.push("FDCPA 15 U.S.C. § 1692e");
   if ($("optFCRA").checked) refs.push("FCRA 15 U.S.C. § 1681 et seq.");
   return refs.length ? refs.join(" • ") : "";
-}
+};
 
-function subjectForMode(mode) {
+const subjectForMode = (mode) => {
   const parts = [];
   if (mode === "validate_cease_calls")
     parts.push("Debt Validation Request + Cease Calls/Text");
@@ -163,9 +264,9 @@ function subjectForMode(mode) {
   if (bal) parts.push(`— Alleged Balance ${bal}`);
 
   return parts.join(" ");
-}
+};
 
-function buildRequests(mode, debtType) {
+const buildRequests = (mode, debtType) => {
   const req = [];
 
   const base = [
@@ -197,9 +298,9 @@ function buildRequests(mode, debtType) {
   }
 
   return req;
-}
+};
 
-function commPrefsBlock(mode) {
+const commPrefsBlock = (mode) => {
   const lines = [];
   const mailOnly = $("prefMailOnly").checked;
   const noCalls = $("prefNoCalls").checked;
@@ -227,10 +328,10 @@ function commPrefsBlock(mode) {
     lines.push("Do not contact me via any employer-owned email address.");
 
   return lines;
-}
+};
 
 // ---------- data model ----------
-function buildLetterData() {
+const buildLetterData = () => {
   const mode = $("letterMode").value;
 
   return {
@@ -270,10 +371,10 @@ function buildLetterData() {
     requests: buildRequests(mode, $("debtType").value),
     commPrefs: commPrefsBlock(mode),
   };
-}
+};
 
 // ---------- rendering ----------
-function renderLetterHtml(d) {
+const renderLetterHtml = (d) => {
   const ids = [];
   if (d.account.balance)
     ids.push(`<b>Reported balance:</b> ${escHtml(d.account.balance)}`);
@@ -330,14 +431,11 @@ function renderLetterHtml(d) {
       ).replace(/\n/g, "<br/>")}</div>`
     : "";
 
-  const reqList = `<ol>${d.requests
-    .map((x) => `<li>${escHtml(x)}</li>`)
-    .join("")}</ol>`;
+  const reqList = `<ol>${d.requests.map((x) => `<li>${escHtml(x)}</li>`).join("")}</ol>`;
   const commList = d.commPrefs.length
     ? `<ul>${d.commPrefs.map((x) => `<li>${escHtml(x)}</li>`).join("")}</ul>`
     : "";
 
-  // Legacy “tight + force paper trail” tone, modern layout
   return `
     <h3>Debt Validation / Dispute Letter</h3>
     <div class="meta">${metaLines.join("<br/>")}</div>
@@ -357,9 +455,7 @@ function renderLetterHtml(d) {
       </div>
     </div>
 
-    <p>
-      To whom it may concern:
-    </p>
+    <p>To whom it may concern:</p>
 
     <p>
       I am writing regarding the alleged debt referenced above. I dispute the validity of this debt and request
@@ -398,9 +494,9 @@ function renderLetterHtml(d) {
       <b>${escHtml(d.consumer.name)}</b>
     </p>
   `.trim();
-}
+};
 
-function renderLetterText(d) {
+const renderLetterText = (d) => {
   const lines = [];
   lines.push("DEBT VALIDATION / DISPUTE LETTER");
   lines.push("");
@@ -473,10 +569,10 @@ function renderLetterText(d) {
   lines.push(d.consumer.name);
 
   return lines.join("\n");
-}
+};
 
-// ---------- prompt pack (better prompting; not tied to any API) ----------
-function buildPromptPack(d) {
+// ---------- prompt pack (not tied to any API) ----------
+const buildPromptPack = (d) => {
   const styleRules = [
     "Do not add facts not provided.",
     "Do not provide legal advice; keep as consumer letter formatting.",
@@ -494,10 +590,7 @@ function buildPromptPack(d) {
   return {
     version: "dvp.promptPack.v1",
     inputs: d,
-    instructions: {
-      styleRules,
-      task: userTask,
-    },
+    instructions: { styleRules, task: userTask },
     messages: [
       {
         role: "system",
@@ -512,19 +605,360 @@ function buildPromptPack(d) {
       },
     ],
   };
-}
+};
+
+// ---------- AI (optional) ----------
+const isGroqUrl = (u) => /api\.groq\.com/i.test(u || "");
+
+const normalizeBaseUrl = (raw) => {
+  const b0 = safe(raw);
+  if (!b0) return "https://api.openai.com/v1";
+
+  const b = b0.replace(/\/+$/, "");
+
+  // Groq OpenAI-compatible base URL is https://api.groq.com/openai/v1
+  if (isGroqUrl(b)) {
+    if (/\/openai\/v1$/i.test(b)) return b;
+    if (/\/openai$/i.test(b)) return b + "/v1";
+    if (/\/v1$/i.test(b)) return b;
+    return b + "/openai/v1";
+  }
+
+  if (/\/v1$/i.test(b)) return b;
+  return b + "/v1";
+};
+
+const inferDefaultModel = (baseUrl) => {
+  const u = safe(baseUrl);
+  if (isGroqUrl(u)) return "llama-3.3-70b-versatile";
+  return "gpt-4o-mini";
+};
+
+const getLLMConfig = () => {
+  const apiKey = safe($("apiKey").value);
+  const baseUrl = normalizeBaseUrl($("baseUrl").value);
+
+  const rawModel = safe($("model").value);
+  const model = rawModel || inferDefaultModel(baseUrl);
+
+  const temperature = clamp(parseFloat($("temp").value || "0.2"), 0, 1.5);
+  const max_tokens = clamp(
+    parseInt($("maxTokens").value || "1200", 10),
+    256,
+    4096
+  );
+
+  return { apiKey, baseUrl, model, temperature, max_tokens };
+};
+
+const buildFdcpReportMessages = (d) => {
+  const system = [
+    "You are a consumer correspondence drafting assistant.",
+    "You must NOT provide legal advice. You must NOT claim to be an attorney or advisor.",
+    "You must NOT fabricate facts. If a field is missing, say 'Not provided'.",
+    "You may only reference statutes explicitly supplied in the input (do not invent citations).",
+    "Write in a calm, professional tone. Keep it skimmable.",
+  ].join(" ");
+
+  const user = [
+    "Using the structured inputs below, generate a 'FDCPA Documentation & Drafting Report' for the consumer.",
+    "",
+    "Output format (use these headings):",
+    "1) Snapshot (facts only)",
+    "2) Timeline / touchpoints (if any dates are present; otherwise say Not provided)",
+    "3) Potential pressure points (phrased as non-conclusive questions/checks, not legal conclusions)",
+    "4) Evidence checklist (what to gather/keep; no advice, just documentation)",
+    "5) Draft-ready narrative (facts only; 1–2 short paragraphs)",
+    "6) Statutory references (repeat exactly as given; if none selected, say None selected)",
+    "",
+    "Important:",
+    "- Do not add threats or lawsuit language.",
+    "- Do not add new statutes or citations.",
+    "- Do not provide step-by-step legal instructions; stay at documentation and drafting level.",
+    "",
+    JSON.stringify(d, null, 2),
+  ].join("\n");
+
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+};
+
+const buildPolishLetterMessages = (d) => {
+  const system = [
+    "You format consumer correspondence as a drafting assistant.",
+    "You must NOT provide legal advice. You must NOT fabricate facts.",
+    "You may only reference statutes explicitly supplied in the input (do not invent citations).",
+    "Tone: calm, firm, factual, brief.",
+    "Output must be HTML ONLY (no markdown, no code fences).",
+    "Use simple HTML: h3, div, p, ul/ol, br, b. Do not include scripts/styles.",
+  ].join(" ");
+
+  const user = [
+    "Rewrite the debt validation/dispute letter into a clearer, more professional final letter.",
+    "Fold in a tight 'Snapshot' inside the letter (facts only) so the letter is more complete and skimmable.",
+    "Do not add threats. Do not mention lawsuits unless the user included it (they did not).",
+    "Keep placeholders like [YOUR FULL NAME] if missing.",
+    "Return an HTML fragment similar to the app's current letter layout: title, meta, from/to, snapshot box, requested documentation list, communication preferences, closing.",
+    "",
+    "INPUTS:",
+    JSON.stringify(d, null, 2),
+  ].join("\n");
+
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+};
+
+const parseApiError = async (res) => {
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  if (ct.includes("application/json")) {
+    try {
+      const j = await res.json();
+      const msg =
+        j?.error?.message ||
+        j?.message ||
+        j?.error ||
+        JSON.stringify(j).slice(0, 600);
+      return msg;
+    } catch {
+      return "";
+    }
+  }
+  try {
+    return (await res.text()).slice(0, 800);
+  } catch {
+    return "";
+  }
+};
+
+const fetchWithRetry = async (url, init, { tries = 2 } = {}) => {
+  let lastErr = null;
+
+  for (let attempt = 0; attempt <= tries; attempt++) {
+    try {
+      const res = await fetch(url, init);
+
+      if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
+        if (attempt < tries) {
+          const wait = 350 * Math.pow(2, attempt);
+          await sleep(wait);
+          continue;
+        }
+      }
+
+      return res;
+    } catch (e) {
+      lastErr = e;
+      const isAbort =
+        e?.name === "AbortError" || String(e?.message || "").includes("abort");
+      if (isAbort) throw e;
+
+      if (attempt < tries) {
+        const wait = 350 * Math.pow(2, attempt);
+        await sleep(wait);
+        continue;
+      }
+      throw lastErr;
+    }
+  }
+
+  throw lastErr || new Error("Network error");
+};
+
+const callChatCompletions = async (
+  { baseUrl, apiKey, model, temperature, max_tokens },
+  messages
+) => {
+  const url = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
+
+  const controller = new AbortController();
+  const timeoutMs = 45_000;
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetchWithRetry(
+      url,
+      {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature,
+          max_tokens,
+        }),
+      },
+      { tries: 2 }
+    );
+
+    if (!res.ok) {
+      const detail = await parseApiError(res);
+      throw new Error(
+        `AI request failed (${res.status}): ${detail || res.statusText}`
+      );
+    }
+
+    const json = await res.json();
+    const content =
+      json?.choices?.[0]?.message?.content ?? json?.choices?.[0]?.text ?? "";
+
+    return safe(content) || "(No content returned.)";
+  } finally {
+    clearTimeout(t);
+  }
+};
+
+const ensureAiButtons = () => {
+  const actions = document.querySelector(".actions");
+  if (!actions) return;
+
+  // Button 1: Draft report (plain text)
+  if (!$("btnAiDraft")) {
+    const btn = document.createElement("button");
+    btn.className = "btn primary";
+    btn.id = "btnAiDraft";
+    btn.type = "button";
+    btn.textContent = "Generate (AI Draft Report)";
+
+    const localBtn = $("btnLocal");
+    if (localBtn && localBtn.parentElement === actions) {
+      actions.insertBefore(btn, localBtn.nextSibling);
+    } else {
+      actions.appendChild(btn);
+    }
+
+    btn.addEventListener("click", async () => {
+      persistInputs();
+      renderAll();
+
+      const cfg = getLLMConfig();
+
+      if (!cfg.apiKey) {
+        setGenStatus("AI Draft: missing key");
+        openModal();
+        return;
+      }
+      if (!looksLikeKey(cfg.apiKey)) {
+        setGenStatus("AI Draft: key looks malformed");
+        openModal();
+        return;
+      }
+
+      setGenStatus(
+        `AI Draft: generating… (${isGroqUrl(cfg.baseUrl) ? "Groq" : "OpenAI-compatible"})`
+      );
+
+      await sleep(50);
+
+      try {
+        const d = buildLetterData();
+        const messages = buildFdcpReportMessages(d);
+        const out = await callChatCompletions(cfg, messages);
+
+        $("outText").textContent = out;
+        setTab("text");
+        setGenStatus("AI Draft: ready");
+      } catch (e) {
+        setGenStatus("AI Draft: failed");
+        $("outText").textContent =
+          "AI Draft failed.\n\n" +
+          String(e?.message || e) +
+          "\n\nNotes:\n" +
+          `- Resolved baseUrl: ${cfg.baseUrl}\n` +
+          `- Endpoint: ${cfg.baseUrl.replace(/\/+$/, "")}/chat/completions\n` +
+          "- Confirm baseUrl is OpenAI-compatible\n" +
+          "- Confirm model name is valid for your provider\n" +
+          "- Confirm key is valid and has access\n";
+        setTab("text");
+      }
+    });
+  }
+
+  // Button 2: Polish letter (HTML -> Letter tab)
+  if (!$("btnAiPolish")) {
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.id = "btnAiPolish";
+    btn.type = "button";
+    btn.textContent = "Polish Letter (AI)";
+
+    const promptBtn = $("btnPromptPack");
+    if (promptBtn && promptBtn.parentElement === actions) {
+      actions.insertBefore(btn, promptBtn);
+    } else {
+      actions.appendChild(btn);
+    }
+
+    btn.addEventListener("click", async () => {
+      persistInputs();
+      renderAll();
+
+      const cfg = getLLMConfig();
+
+      if (!cfg.apiKey) {
+        setGenStatus("AI Polish: missing key");
+        openModal();
+        return;
+      }
+      if (!looksLikeKey(cfg.apiKey)) {
+        setGenStatus("AI Polish: key looks malformed");
+        openModal();
+        return;
+      }
+
+      setGenStatus(
+        `AI Polish: generating… (${isGroqUrl(cfg.baseUrl) ? "Groq" : "OpenAI-compatible"})`
+      );
+
+      await sleep(50);
+
+      try {
+        const d = buildLetterData();
+        const messages = buildPolishLetterMessages(d);
+        const out = await callChatCompletions(cfg, messages);
+
+        const cleaned = sanitizeHtml(out);
+        if (!cleaned) throw new Error("Empty HTML returned.");
+
+        $("outLetter").innerHTML = cleaned;
+        setTab("letter");
+        setGenStatus("AI Polish: ready");
+      } catch (e) {
+        setGenStatus("AI Polish: failed");
+        $("outText").textContent =
+          "AI Polish failed.\n\n" +
+          String(e?.message || e) +
+          "\n\nNotes:\n" +
+          `- Resolved baseUrl: ${cfg.baseUrl}\n` +
+          `- Endpoint: ${cfg.baseUrl.replace(/\/+$/, "")}/chat/completions\n` +
+          "- Confirm baseUrl is OpenAI-compatible\n" +
+          "- Confirm model name is valid for your provider\n" +
+          "- Confirm key is valid and has access\n";
+        setTab("text");
+      }
+    });
+  }
+};
 
 // ---------- UI wiring ----------
-function setTab(which) {
+const setTab = (which) => {
   document.querySelectorAll(".tab").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.tab === which);
   });
   $("outLetter").style.display = which === "letter" ? "" : "none";
   $("outText").style.display = which === "text" ? "" : "none";
   $("outPrompt").style.display = which === "prompt" ? "" : "none";
-}
+};
 
-function renderAll() {
+const renderAll = () => {
   const d = buildLetterData();
   const html = renderLetterHtml(d);
   const txt = renderLetterText(d);
@@ -533,10 +967,9 @@ function renderAll() {
   $("outLetter").innerHTML = html;
   $("outText").textContent = txt;
   $("outPrompt").textContent = JSON.stringify(pack, null, 2);
-}
+};
 
-function fillDemoData() {
-  // Fictional demo
+const fillDemoData = () => {
   $("yourName").value = "Jane Q. Consumer";
   $("yourEmail").value = "jane@example.com";
   $("yourPhone").value = "(555) 555-0123";
@@ -555,21 +988,17 @@ function fillDemoData() {
   $("summary").value =
     "I dispute this account. Please validate the debt and provide itemization. I request written-only communication.";
 
-  // keep defaults
   $("letterMode").value = "validate_cease_calls";
   $("jurisdiction").value = "Federal";
   renderAll();
   setGenStatus("Demo filled");
-}
+};
 
-function resetAll() {
-  // Clear inputs + storage (except saveMode preference)
+const resetAll = () => {
   const st = LS.store;
   FIELD_IDS.forEach((f) => st.removeItem("dvp." + f));
-  // keys are separate
   st.removeItem("dvp.apiKey");
 
-  // clear UI fields
   FIELD_IDS.forEach((f) => {
     const el = $(f);
     if (!el) return;
@@ -577,7 +1006,6 @@ function resetAll() {
     else el.value = "";
   });
 
-  // restore sane defaults
   $("opt1692g").checked = true;
   $("opt1692c").checked = true;
   $("prefMailOnly").checked = true;
@@ -593,28 +1021,35 @@ function resetAll() {
   updateKeyStatus();
   renderAll();
   setGenStatus("Reset");
-}
+};
 
-function openModal() {
+const openModal = () => {
   $("modalBackdrop").classList.add("show");
-}
-function closeModal() {
+};
+
+const closeModal = () => {
   $("modalBackdrop").classList.remove("show");
-}
+};
 
 // ---------- init ----------
-(function init() {
+(() => {
   if (!$("today").value) $("today").value = nowMMDDYYYY();
 
   loadKeysAndSettings();
   restoreInputs();
 
-  // If today field empty after restore, set it.
   if (!safe($("today").value)) $("today").value = nowMMDDYYYY();
 
   renderAll();
+  ensureAiButtons();
 
-  // Events that should re-render + persist
+  const show = $("showApiKey");
+  if (show) {
+    show.addEventListener("change", () => {
+      $("apiKey").type = show.checked ? "text" : "password";
+    });
+  }
+
   const reRenderOn = [
     "letterMode",
     "jurisdiction",
@@ -666,12 +1101,10 @@ function closeModal() {
     });
   });
 
-  // Tabs
   document.querySelectorAll(".tab").forEach((btn) => {
     btn.addEventListener("click", () => setTab(btn.dataset.tab));
   });
 
-  // Buttons
   $("btnLocal").addEventListener("click", () => {
     persistInputs();
     renderAll();
@@ -711,7 +1144,6 @@ function closeModal() {
   $("btnDemo").addEventListener("click", fillDemoData);
   $("btnReset").addEventListener("click", resetAll);
 
-  // Modal + keys
   $("btnKeys").addEventListener("click", openModal);
   $("btnCloseModal").addEventListener("click", closeModal);
   $("modalBackdrop").addEventListener("click", (e) => {
@@ -720,15 +1152,14 @@ function closeModal() {
 
   $("saveMode").addEventListener("change", () => {
     LS.setMode($("saveMode").value);
-    persistInputs(); // move inputs to the selected storage
-    saveKeys();
+    persistInputs();
+    loadKeyIntoField();
     setGenStatus("Save mode updated");
   });
 
   $("btnSaveKeys").addEventListener("click", () => {
     saveKeys();
     closeModal();
-    setGenStatus("Keys saved (browser storage)");
   });
 
   $("btnClearKeys").addEventListener("click", () => {

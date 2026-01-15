@@ -88,3 +88,7 @@ npm run build
 - This repo does not send keys anywhere unless you implement network calls yourself.
 
 - Do not commit secrets into the repo.
+
+## Dependency note (esbuild audit)
+
+`npm audit` may report a moderate advisory for esbuild related to its development server behavior. This project uses esbuild only for bundling/minifying, and the repo’s dev script runs a simple static server. If you want to address the advisory, update esbuild to a fixed version and re-test your build output.

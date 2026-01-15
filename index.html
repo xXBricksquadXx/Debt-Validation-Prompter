@@ -310,14 +310,14 @@
                 <label>Base URL (OpenAI-compatible)</label>
                 <input
                   id="baseUrl"
-                  placeholder="Leave blank unless you wire AI calls"
+                  placeholder="Examples: https://api.groq.com/openai/v1  •  https://api.openai.com/v1"
                 />
               </div>
               <div>
                 <label>Model</label>
                 <input
                   id="model"
-                  placeholder="Leave blank unless you wire AI calls"
+                  placeholder="Examples: llama-3.3-70b-versatile (Groq)  •  gpt-4o-mini (OpenAI)"
                 />
               </div>
             </div>
@@ -349,7 +349,8 @@
 
             <div class="tiny">
               This build produces a prompt pack JSON you can run anywhere. No
-              network calls are performed unless you implement them.
+              network calls are performed unless you implement them. If you do,
+              keys remain browser-only.
             </div>
           </div>
         </div>
@@ -407,7 +408,19 @@
 
         <div>
           <label>LLM API Key (stored in browser only)</label>
-          <input id="apiKey" placeholder="Paste key… (optional)" />
+          <input
+            id="apiKey"
+            type="password"
+            placeholder="Paste key… (optional)"
+          />
+          <div class="row" style="margin-top: 8px">
+            <div class="pillrow">
+              <label class="pill" style="margin: 0">
+                <input type="checkbox" id="showApiKey" />
+                Show key
+              </label>
+            </div>
+          </div>
         </div>
 
         <div class="row" style="margin-top: 10px">
@@ -439,6 +452,10 @@
         <div class="help" style="margin-top: 12px">
           <b>Security:</b> Keys are stored only in your browser storage. They
           are not embedded into the source unless you hardcode them (don’t).
+          <br />
+          <b>Note:</b> Client-side keys are inherently exposable to whoever can
+          run JS in your browser session. This UI is meant for your own testing
+          key, not for distributing a shared key.
         </div>
       </div>
     </div>

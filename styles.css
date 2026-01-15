@@ -43,7 +43,6 @@ body {
   font-family: var(--sans);
   color: var(--text);
 
-  /* Ensure background covers full height and stays pinned */
   min-height: 100vh;
   background-attachment: fixed;
   background-image:
@@ -152,7 +151,6 @@ body {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
 }
 
-/* Primary Button with Glass Shimmer */
 .btn.primary {
   position: relative;
   overflow: hidden;
@@ -223,7 +221,6 @@ body {
   padding: var(--pad);
 }
 
-/* Left Card with Custom Themed Scrollbar */
 .left {
   max-height: calc(100vh - 140px);
   overflow: auto;
@@ -494,7 +491,6 @@ a:hover {
   text-decoration: underline;
 }
 
-/* Modal */
 .modalBackdrop {
   position: fixed;
   inset: 0;
