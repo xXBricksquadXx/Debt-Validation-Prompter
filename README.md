@@ -2,21 +2,71 @@
 
 # Debt Validation Prompter
 
-Browser-only tool to generate FDCPA debt validation / dispute / cease-contact letters using local templates, plus a “prompt pack” JSON you can run in any LLM workflow (no network calls in this repo by default).
+Browser-only tool to generate FDCPA debt validation / dispute / cease-contact letters using local templates, plus a “prompt pack” JSON you can run in any LLM workflow.
 
 **Live site:** https://debtvalidationprompter.netlify.app/
 
 ## What it does
 
-- Generates a formatted **letter (HTML)** preview
+- Generates a formatted **letter (HTML)** preview (local, no network required)
 - Generates **plain text** output for copy/paste
-- Generates a **Prompt Pack (JSON)** you can paste into ChatGPT / other LLMs to rewrite for clarity (still no legal advice)
-- Stores your inputs and optional API key **only in your browser storage** (localStorage or sessionStorage)
-- Print-friendly output
+- Generates a **Prompt Pack (JSON)** you can paste into ChatGPT / other LLMs to rewrite for clarity
+- Optional AI helpers (only if you provide your own key):
+  - **AI Draft Report** → outputs a “Documentation & Drafting Report” in the Plain text tab
+  - **AI Polish Letter** → rewrites the letter and inserts a compact “Snapshot” section into the Letter tab
 
 ## Not legal advice
 
 This project formats consumer correspondence. It does **not** provide legal advice. For legal guidance, consult a qualified attorney.
+
+## Security model (important)
+
+- Any API key you enter is stored **only in your browser** (localStorage or sessionStorage).
+- This repo does not embed or ship a secret.
+- Client-side keys are inherently exposable to whoever can run JS in your browser session. This is intended for **your personal testing key**, not for distributing a shared key.
+
+### Fail-safe key storage
+
+Browser storage can fail in some environments (private browsing, quota limits, restrictive settings).
+This app uses a fail-safe wrapper:
+
+- Primary: localStorage or sessionStorage (your choice)
+- Fallback: in-memory (so the UI still works even if storage APIs error)
+
+## AI endpoints (OpenAI-compatible)
+
+The app supports any OpenAI-compatible provider by setting:
+
+- Base URL
+- Model
+- API Key
+
+### OpenAI
+
+Base URL:
+
+- `https://api.openai.com/v1`
+
+Model example:
+
+- `gpt-4o-mini`
+
+### Groq (OpenAI-compatible)
+
+Base URL:
+
+- `https://api.groq.com/openai/v1`
+
+Chat endpoint:
+
+- `https://api.groq.com/openai/v1/chat/completions`
+
+Model examples:
+
+- `llama-3.3-70b-versatile`
+- `llama3-70b-8192`
+- `mixtral-8x7b-32768`
+- `gemma2-9b-it`
 
 ## Local usage
 
@@ -44,19 +94,16 @@ npm install
 npm run build
 ```
 
-## Netlify publishes `dist/` via `netlify.toml`
+> Netlify publishes dist/ via netlify.toml.
 
 ## Scripts
 
-`npm run dev` — start a local static server
+- `npm run dev` — start a local static server
+- `npm run build` — bundle + minify into dist/
+- `npm run format` — format the repo with Prettier
+- `npm run check` — verify formatting
 
-`npm run build` — bundle + minify into dist/
-
-`npm run format` — format the repo with Prettier
-
-`npm run check` — verify formatting
-
-## Project structure
+**Project structure**
 
 ```txt
 .
@@ -78,17 +125,20 @@ npm run build
 │  └─ settings.json
 └─ assets/                # optional (banner image)
    └─ banner.png
-
 ```
 
-## Security notes
+### Changelog (high level)
 
-- Any API key you enter is stored only in your browser (localStorage or sessionStorage).
+- Added fail-safe key storage wrapper (local/session + in-memory fallback).
 
-- This repo does not send keys anywhere unless you implement network calls yourself.
+- Masked key indicator in UI; optional show/hide key.
 
-- Do not commit secrets into the repo.
+- Improved baseUrl normalization for Groq/OpenAI-compatible providers.
 
-## Dependency note (esbuild audit)
+- Added retry + better error surfaces for network/API failures.
 
-`npm audit` may report a moderate advisory for esbuild related to its development server behavior. This project uses esbuild only for bundling/minifying, and the repo’s dev script runs a simple static server. If you want to address the advisory, update esbuild to a fixed version and re-test your build output.
+> Added optional AI helpers:
+
+- AI Draft Report → plain text
+
+- AI Polish Letter → HTML letter + embedded Snapshot
