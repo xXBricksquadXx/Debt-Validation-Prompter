@@ -1,0 +1,83 @@
+![Debt Validation Prompter banner](./assets/banner.png)
+
+# Debt Validation Prompter
+
+Browser-only tool to generate FDCPA debt validation / dispute / cease-contact letters using local templates, plus a “prompt pack” JSON you can run in any LLM workflow (no network calls in this repo by default).
+
+**Live site:** https://debtvalidationprompter.netlify.app/
+
+## What it does
+
+- Generates a formatted **letter (HTML)** preview
+- Generates **plain text** output for copy/paste
+- Generates a **Prompt Pack (JSON)** you can paste into ChatGPT / other LLMs to rewrite for clarity (still no legal advice)
+- Stores your inputs and optional API key **only in your browser storage** (localStorage or sessionStorage)
+- Print-friendly output
+
+## Not legal advice
+
+This project formats consumer correspondence. It does **not** provide legal advice. For legal guidance, consult a qualified attorney.
+
+## Local usage
+
+### Option A: Open directly
+
+You can open `index.html` in a browser.
+
+### Option B: Run a local server (recommended)
+
+Clipboard APIs and some browser features can be restricted on `file://`. Running a local server avoids that.
+
+```bash
+npm install
+npm run dev
+```
+
+> Then open the URL shown in your terminal.
+
+### Build & deploy (Netlify)
+
+This repo uses esbuild to bundle/minify into `dist/`
+
+```bash
+npm install
+npm run build
+```
+
+## Netlify publishes `dist/` via `netlify.toml`
+
+## Scripts
+
+`npm run dev` — start a local static server
+
+`npm run build` — bundle + minify into dist/
+
+`npm run format` — format the repo with Prettier
+
+`npm run check` — verify formatting
+
+## Project structure
+
+```txt
+.
+├─ index.html
+├─ styles.css
+├─ app.js
+├─ netlify.toml
+├─ package.json
+├─ package-lock.json
+├─ .prettierrc
+├─ .prettierignore
+├─ .vscode/
+│  └─ settings.json
+└─ assets/                # optional (banner image)
+   └─ banner.png
+```
+
+## Security notes
+
+- Any API key you enter is stored only in your browser (localStorage or sessionStorage).
+
+- This repo does not send keys anywhere unless you implement network calls yourself.
+
+- Do not commit secrets into the repo.

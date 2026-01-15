@@ -15,7 +15,7 @@ function escHtml(s) {
         ">": "&gt;",
         '"': "&quot;",
         "'": "&#039;",
-      }[c])
+      })[c]
   );
 }
 function nowMMDDYYYY() {
